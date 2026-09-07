@@ -43,11 +43,12 @@ no app, no `swiftc`. From a checkout: `python3 src/tower-tui.py`.
 
 </details>
 
-**On Ubuntu or Debian?** There's a package:
+**On Ubuntu or Debian?** There are packages — including the radar for your
+top bar:
 
 ```sh
-sudo apt install ./tower_3.1.0_all.deb     # from the releases page
-tower                                      # open the dashboard
+sudo apt install ./tower_3.1.0_all.deb ./tower-tray_3.1.0_all.deb
+tower-tray                                 # the radar in your top bar
 ```
 
 Ubuntu 22.04 → 26.04, amd64 and arm64. See [Linux](#linux-debianubuntu).
@@ -249,6 +250,7 @@ tower/
     ├── towerd.py               # the daemon (proxy + geo + usage + net + agents + IPC)
     ├── *.swift                  # native menubar app (AppKit + SwiftUI); Glyph.swift = the marks
     ├── tower-tui.py            # terminal dashboard (curses)
+    ├── tower-tray.py           # Linux top-bar radar (GTK3 + AppIndicator)
     ├── _linux.py                # the Linux edges (systemd-inhibit, /proc)
     ├── _win.py, _wincurses.py   # the Windows edges (mutex, keep-awake, curses shim)
     ├── Info.plist
@@ -276,8 +278,8 @@ codebase small and the [Windows port](windows_plan.md) straightforward.
 ## Requirements
 
 - **macOS 14+**, Apple Silicon — for the full experience (menubar app + TUI).
-- **Ubuntu 22.04+ / Debian 12+** — daemon + terminal dashboard, as a `.deb`;
-  see [Linux](#linux-debianubuntu) below.
+- **Ubuntu 22.04+ / Debian 12+** — daemon, terminal dashboard **and a top-bar
+  radar**, as two `.deb`s; see [Linux](#linux-debianubuntu) below.
 - **Windows 10/11** — daemon + terminal dashboard only, and **experimental**;
   see [Windows](#windows-experimental) below.
 - **Python 3.8+** on `PATH` (macOS ships one; Homebrew or python.org also fine).
@@ -293,34 +295,53 @@ probes.
 
 ## Linux (Debian/Ubuntu)
 
-The daemon and the terminal dashboard run on Linux, packaged. The menubar app
-is Swift/AppKit and has no Linux counterpart, so here the TUI *is* the
-front-end — and a complete one: everything the popover does, it does.
+All three parts run on Linux, packaged: the daemon, the terminal dashboard, and
+**the radar in your top bar** — the Linux counterpart of the macOS menu-bar app.
 
 ```sh
-sudo apt install ./tower_<version>_all.deb
+sudo apt install ./tower_<version>_all.deb ./tower-tray_<version>_all.deb
 
-tower                                  # open the dashboard (starts the daemon)
-systemctl --user enable --now tower    # keep the guard running from login
+tower-tray                                 # the radar in your top bar
+tower                                      # the terminal dashboard
+systemctl --user enable --now tower-tray   # the radar there from login
 ```
 
-**Ubuntu 22.04, 24.04 and 26.04 are tested in CI** (install, run, un-route on
-`SIGTERM`, remove) on each release's own Python. `Architecture: all` — nothing
-is compiled, so one package covers amd64 and arm64. The only dependencies are
-`python3` and `procps`, which a stock Ubuntu already has.
+Two packages, on purpose: **`tower`** is the daemon plus the dashboard and
+needs only `python3` and `procps` (so it installs on a headless build box),
+while **`tower-tray`** pulls GTK3 and the Ayatana indicator bindings, which
+have no business on a server. Either front-end starts the daemon on demand.
 
-Installing the package starts nothing on purpose — the daemon opens a proxy and
-edits `~/.claude/settings.json`, so switching it on stays your call. "On by
-default" still holds where it counts: `tower` starts the daemon on demand.
-Stopping it (`systemctl --user stop tower`, or `Q` in the dashboard) sends
-`SIGTERM`, and the daemon un-routes Claude Code before it exits.
+**Ubuntu 22.04, 24.04 and 26.04 are tested in CI** — install, run, un-route on
+`SIGTERM`, remove, plus the tray's toolkit actually importing and its
+no-session path exiting with one honest line — on each release's own Python.
+`Architecture: all`: nothing is compiled, so one build covers amd64 and arm64.
 
-Build it from a checkout — the only build dependency is `dpkg` itself:
+The top bar is a StatusNotifierItem, which KDE, XFCE, Cinnamon and Budgie show
+natively. **GNOME shows one only through its shipped appindicator extension** —
+Ubuntu's session enables it by default; if the radar doesn't appear, `sudo apt
+install gnome-shell-extension-appindicator`.
+
+Installing starts nothing on purpose — the daemon opens a proxy and edits
+`~/.claude/settings.json`, so switching it on stays your call. "On by default"
+still holds where it counts: opening either front-end starts the daemon.
+Stopping it (`systemctl --user stop tower`, `Q` in the dashboard, **Quit
+Tower** in the menu) sends `SIGTERM`, and the daemon un-routes Claude Code
+before it exits.
+
+Build both from a checkout — the only build dependency is `dpkg` itself:
 
 ```sh
-packaging/deb/build.sh             # → dist/tower_<version>_all.deb
+packaging/deb/build.sh             # → dist/tower{,-tray}_<version>_all.deb
 packaging/deb/build.sh --install
 ```
+
+The top-bar radar is [`src/tower-tray.py`](src/tower-tray.py) — GTK3 through
+the distro's own `python3-gi`, with the mark itself a Cairo port of
+`drawRadar()` in [`src/Glyph.swift`](src/Glyph.swift), so it is the same five
+states and the same keep-awake lamp, not a lookalike. Reduce Motion (the
+desktop's own setting) freezes each state at its legible still frame, and the
+two dangerous switch-offs are confirmed twice with the agent counts quoted,
+exactly as in the app.
 
 Four OS edges differ from macOS, all in [`src/_linux.py`](src/_linux.py):
 keep-awake is `systemd-inhibit` (which covers idle, sleep **and the lid** with
@@ -385,7 +406,8 @@ flag. The plan for the native tray is [windows_plan.md](windows_plan.md).
 
 ## License
 
-Open source. Use it, fork it, port it. It has been: the daemon and dashboard
-run on [Linux](#linux-debianubuntu), packaged for Debian/Ubuntu, and on
-[Windows](#windows-experimental), experimentally. Both are missing only the
-native tray — `windows_plan.md` covers what that takes.
+Open source. Use it, fork it, port it. It has been: on
+[Linux](#linux-debianubuntu) the daemon, the dashboard **and the top-bar
+radar** are packaged for Debian/Ubuntu; on [Windows](#windows-experimental) the
+daemon and dashboard run experimentally, and the native tray is still missing —
+`windows_plan.md` covers what that takes.

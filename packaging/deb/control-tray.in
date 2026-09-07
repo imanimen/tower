@@ -1,0 +1,25 @@
+Package: tower-tray
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: @MAINTAINER@
+Depends: tower (= @VERSION@), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0,
+ gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1
+Recommends: gnome-shell-extension-appindicator
+Homepage: https://github.com/imanimen/tower
+Installed-Size: @SIZE@
+Description: Tower in the menu bar — the top-bar front-end
+ The radar in your top bar, and a panel behind it: guard status, network
+ weather, every running Claude agent, your location, keep-awake, and plan
+ usage. It is the Linux counterpart of Tower's macOS menu-bar app, over the
+ same contract — it reads ~/.tower/state.json and writes command files, and
+ the daemon in the "tower" package owns all the logic.
+ .
+ Turning the guard off, or quitting, is warned hard and confirmed twice, and
+ the warning says how many agents are working right now and how many chats are
+ pinned to the proxy — the same rule both other front-ends follow.
+ .
+ It draws a StatusNotifierItem, which KDE, XFCE, Cinnamon and Budgie show
+ natively. GNOME needs the shipped appindicator extension, hence the
+ Recommends; Ubuntu's GNOME session enables it by default.

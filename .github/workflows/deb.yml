@@ -1,7 +1,7 @@
-# Build the Debian package and prove it installs and runs on every Ubuntu we
-# claim: 22.04 through 26.04. The package is Architecture: all (Tower on Linux
-# compiles nothing), so it is built once and then installed into each release's
-# container.
+# Build the Debian packages and prove they install and run on every Ubuntu we
+# claim: 22.04 through 26.04. Both are Architecture: all (Tower on Linux
+# compiles nothing), so they are built once and then installed into each
+# release's container.
 name: deb
 
 on:
@@ -10,6 +10,7 @@ on:
     paths:
       - 'src/towerd.py'
       - 'src/tower-tui.py'
+      - 'src/tower-tray.py'
       - 'src/_linux.py'
       - 'src/Info.plist'
       - 'packaging/deb/**'
@@ -22,14 +23,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      deb: ${{ steps.build.outputs.deb }}
     steps:
       - uses: actions/checkout@v4
-      - id: build
-        run: |
-          packaging/deb/build.sh
-          echo "deb=$(basename dist/*.deb)" >> "$GITHUB_OUTPUT"
+      - run: packaging/deb/build.sh
       - name: lintian
         run: |
           sudo apt-get update -qq
@@ -58,9 +54,10 @@ jobs:
           path: dist
       - name: install, run, un-route, remove on ${{ matrix.image }}
         run: |
-          DEB=$(ls dist/*.deb | head -1)
+          DEB=$(ls dist/tower_*.deb | head -1)
+          TRAY=$(ls dist/tower-tray_*.deb | head -1)
           docker run --rm -v "$PWD:/pkg" -w /pkg "${{ matrix.image }}" \
-            bash packaging/deb/ci-smoke.sh "$DEB"
+            bash packaging/deb/ci-smoke.sh "$DEB" "$TRAY"
 
   attach:
     if: github.event_name == 'release'

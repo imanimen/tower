@@ -1,19 +1,24 @@
 # Tower on Linux
 
-Tower on Linux is the **daemon plus the terminal dashboard**. The menu-bar app
-is macOS-only (Swift/AppKit), so `tower` — the curses dashboard — is the whole
-front-end here, and it is a complete one: everything the popover can do, the
-TUI can do.
+Tower on Linux is the **daemon**, the **terminal dashboard**, and the **top-bar
+radar** — the Linux answer to the macOS menu-bar app. Two packages, because
+they have different reasons to exist:
 
-The split that makes this cheap is the same one the Windows port uses: **one
-daemon owns all logic and state; the front-ends read `~/.tower/state.json` and
-write `~/.tower/cmd/*.json`.** `towerd.py` is stdlib Python and already
-portable; only four OS edges differ, and they live in `src/_linux.py`.
+| Package | What it is | Pulls |
+|---|---|---|
+| `tower` | the daemon + the curses dashboard (`tower`) | `python3`, `procps` — a stock Ubuntu already has both, so it installs on a headless server |
+| `tower-tray` | the top-bar radar and its panel (`tower-tray`) | GTK3 + the Ayatana indicator bindings, which have no business on a server |
+
+The split that makes all of this cheap is the same one the Windows port uses:
+**one daemon owns all logic and state; the front-ends read
+`~/.tower/state.json` and write `~/.tower/cmd/*.json`.** `towerd.py` is stdlib
+Python and already portable; only four OS edges differ, and they live in
+`src/_linux.py`.
 
 ## Install
 
 ```sh
-sudo apt install ./tower_<version>_all.deb
+sudo apt install ./tower_<version>_all.deb ./tower-tray_<version>_all.deb
 ```
 
 Ubuntu 22.04 through 26.04 (and Debian 12+). `Architecture: all` — Tower on
@@ -37,11 +42,17 @@ debhelper, no build-essential, and the same script runs on 22.04 and 26.04.
 ## Running it
 
 ```sh
-tower                                 # open the dashboard; starts the daemon
-systemctl --user enable --now tower   # keep the guard running from login
+tower-tray                                 # the radar in your top bar
+tower                                      # the terminal dashboard
+systemctl --user enable --now tower-tray   # the radar there from login
+systemctl --user enable --now tower        # the guard alone, no session needed
 systemctl --user status tower
 journalctl --user -u tower -f
 ```
+
+Either front-end starts the daemon on demand, so `tower-tray` on its own is the
+whole setup. The `tower.service` unit is for a machine with no session — a
+build box you still want guarded.
 
 Installing the package **starts nothing**. That is deliberate: the daemon opens
 a local proxy and edits `~/.claude/settings.json`, which should be something
@@ -53,6 +64,46 @@ systemd **user** unit is the login-item analog, one command away.
 Stopping the unit sends `SIGTERM`, which the daemon handles by removing the
 proxy from `~/.claude/settings.json` before it exits. A stopped Tower always
 leaves Claude Code on a working direct connection.
+
+## The top bar
+
+`tower-tray` draws Tower's radar as a **StatusNotifierItem**: the same five
+looks as the macOS menu bar (a calm pulse while guarding, a rotating sweep
+while confirming your location, amber dashed with sonar pings when there is no
+path to Anthropic, an amber fence and a lunging blip when you are off-country,
+a red dashed ring with a hollow core when routing is off), with the keep-awake
+lamp lighting the core underneath. The geometry is a Cairo port of
+`drawRadar()` in `src/Glyph.swift` — one mark, two toolkits — and the desktop's
+own *reduce animations* setting freezes each state at its legible still frame.
+
+Left-click is the menu: status, the guard toggle, keep-awake, target country,
+the running agents (click one to raise its tab), and **Open Tower…** for the
+full panel — network weather, the needs-you queue, agents, location,
+keep-awake, and plan usage, in the popover's fixed attention order.
+Middle-click opens the panel directly. Closing the panel never stops the guard.
+
+Turning the guard off and quitting are warned and confirmed **twice**, and the
+warning quotes how many agents are working right now (they would start sending
+unguarded requests immediately); quitting also quotes how many chats are pinned
+to the proxy and will lose their connection until restarted. Same rule, same
+numbers, as the app and the TUI.
+
+### Why AppIndicator, and what GNOME needs
+
+GTK's own `StatusIcon` has been deprecated for a decade and does not appear on
+GNOME under Wayland at all, so the tray is a StatusNotifierItem — which KDE,
+XFCE, Cinnamon and Budgie render natively. **GNOME shows one only through the
+shipped appindicator extension.** Ubuntu's GNOME session enables it by default;
+if you see no radar:
+
+```sh
+sudo apt install gnome-shell-extension-appindicator
+gnome-extensions enable ubuntu-appindicators@ubuntu.com
+```
+
+The toolkit is GTK3 through the distro's own `python3-gi`. That is the Linux
+reading of Tower's *no third-party deps* rule: AppKit is macOS's platform
+toolkit, GTK is Ubuntu's, and neither arrives through pip.
 
 ## What differs from macOS
 
@@ -95,9 +146,11 @@ check.
 |---|---|
 | `/usr/bin/tower` | the dashboard |
 | `/usr/bin/towerd` | the daemon (you rarely run this by hand) |
-| `/usr/lib/tower/` | `towerd.py`, `tower-tui.py`, `_linux.py` |
-| `/usr/lib/systemd/user/tower.service` | the login-item analog |
+| `/usr/bin/tower-tray` | the top-bar radar |
+| `/usr/lib/tower/` | `towerd.py`, `tower-tui.py`, `_linux.py`, `tower-tray.py` |
+| `/usr/lib/systemd/user/tower{,-tray}.service` | the login-item analogs |
 | `~/.tower/` | state, config, log, command files |
+| `~/.cache/tower/icons` | rendered radar frames (a cache; safe to delete) |
 | `~/.claude/settings.json` | where routing is installed — the `env` block only |
 
 Removing the package stops any running daemon first (so each one un-routes on
@@ -105,9 +158,13 @@ its way out) and leaves `~/.tower` alone. To clear it: `rm -rf ~/.tower`.
 
 ## Not on Linux
 
-- **The menu-bar app.** A tray front-end would be the GTK/Qt analog of
-  `AppIndicator`; nothing in the daemon is in its way — it would read the same
-  `state.json` and write the same command files — but it is not written.
-- **Desktop notifications.** macOS gets them from the app (`Notifier.swift`);
-  the daemon itself has never sent any, on any platform, so the dashboard is
-  where status shows up here.
+- **Desktop notifications.** macOS gets them from the app
+  (`src/Notifier.swift`); the daemon itself has never sent any, on any
+  platform, so the top bar and the dashboard are where status shows up here.
+- **The model marks.** The per-model glyphs (`drawModelMark`) are not ported;
+  the tray names the model in the row's accent colour, which is what the TUI
+  does too.
+- **Popover placement.** Wayland gives a client no way to put a surface under a
+  top-bar item, so **Open Tower…** opens a titled window rather than a panel
+  pinned to the icon. Pretending otherwise would mean a panel that lands in the
+  wrong place.

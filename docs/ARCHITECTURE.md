@@ -164,7 +164,8 @@ front-ends surface these and offer "stop the guard & everything", which sends
 `state.json.platform` says which OS wrote the state — `"macos"`, `"linux"` or
 `"windows"` — so a front-end can adapt without guessing from its own platform.
 
-See **[APP.md](APP.md)** and **[TUI.md](TUI.md)** for the two front-ends,
-**[DESIGN.md](DESIGN.md)** for the design system, **[LINUX.md](LINUX.md)** for
-the Debian/Ubuntu package and the four Linux edges, and
+See **[APP.md](APP.md)** and **[TUI.md](TUI.md)** for two of the three
+front-ends, **[DESIGN.md](DESIGN.md)** for the design system,
+**[LINUX.md](LINUX.md)** for the Debian/Ubuntu packages, the Linux top-bar
+radar and the four Linux edges, and
 **[../windows_plan.md](../windows_plan.md)** for the Windows port plan.

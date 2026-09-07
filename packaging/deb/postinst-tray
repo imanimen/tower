@@ -1,0 +1,36 @@
+#!/bin/sh
+# Tower tray postinst. Like the daemon's, it starts nothing: a top-bar icon
+# appearing without being asked for is worse than one command.
+set -e
+
+case "$1" in
+  configure)
+    if command -v update-desktop-database >/dev/null 2>&1; then
+      update-desktop-database -q /usr/share/applications || true
+    fi
+
+    cat <<'MSG'
+
+  Tower's top-bar radar installed.
+
+    tower-tray                                open it now
+    systemctl --user enable --now tower-tray  have it there from login
+
+  It starts the guard daemon itself, so that one command is the whole setup.
+  Left-click the radar for the menu; "Open Tower…" for the full panel.
+
+  On GNOME the icon needs the shipped appindicator extension. Ubuntu's session
+  enables it by default; if you see no radar:
+
+    sudo apt install gnome-shell-extension-appindicator
+    gnome-extensions enable ubuntu-appindicators@ubuntu.com
+
+  KDE, XFCE, Cinnamon and Budgie show it with nothing extra.
+
+MSG
+    ;;
+  abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+esac
+
+exit 0

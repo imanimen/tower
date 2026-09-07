@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Tower
+Name=Tower Dashboard (Terminal)
 GenericName=Claude agent control tower
 Comment=Pin Claude Code to a country, watch plan usage, monitor every agent
 Exec=tower
