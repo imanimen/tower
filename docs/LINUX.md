@@ -1,13 +1,21 @@
 # Tower on Linux
 
 Tower on Linux is the **daemon**, the **terminal dashboard**, and the **top-bar
-radar** — the Linux answer to the macOS menu-bar app. Two packages, because
-they have different reasons to exist:
+radar** — the Linux answer to the macOS menu-bar app. One package with all
+three:
 
-| Package | What it is | Pulls |
-|---|---|---|
-| `tower` | the daemon + the curses dashboard (`tower`) | `python3`, `procps` — a stock Ubuntu already has both, so it installs on a headless server |
-| `tower-tray` | the top-bar radar and its panel (`tower-tray`) | GTK3 + the Ayatana indicator bindings, which have no business on a server |
+| Command | What it is |
+|---|---|
+| `tower-tray` | the radar in your top bar, and the panel behind it |
+| `tower` | the curses terminal dashboard |
+| `towerd` | the daemon (you rarely run this by hand) |
+
+The only hard dependencies are `python3` and `procps`, both on a stock Ubuntu
+already. GTK3 and the Ayatana indicator bindings are **Recommends**, not
+Depends: apt pulls them by default on a desktop, and
+`apt install --no-install-recommends` gives a headless machine the daemon and
+the dashboard without dragging GTK onto a server. Without them `tower-tray`
+says so and names the packages it wants.
 
 The split that makes all of this cheap is the same one the Windows port uses:
 **one daemon owns all logic and state; the front-ends read
@@ -18,18 +26,20 @@ Python and already portable; only four OS edges differ, and they live in
 ## Install
 
 ```sh
-sudo apt install ./tower_<version>_all.deb ./tower-tray_<version>_all.deb
+sudo apt install ./tower_<version>_all.deb                       # desktop
+sudo apt install --no-install-recommends ./tower_<version>_all.deb   # server
 ```
 
 Ubuntu 22.04 through 26.04 (and Debian 12+). `Architecture: all` — Tower on
 Linux compiles nothing, so one package covers amd64 and arm64.
 
-Dependencies are `python3` (>= 3.9) and `procps`, both of which a stock Ubuntu
-already has. `tmux` is a *Recommends*: without it the dashboard cannot raise an
-agent's terminal tab and hands you `claude --resume <id>` instead. Nothing else
-depends on it.
+`tmux` is another *Recommends*: without it neither front-end can raise an
+agent's terminal tab, and both hand you `claude --resume <id>` instead.
+`gnome-shell-extension-appindicator` is a *Suggests* — Ubuntu's GNOME session
+already enables it, and making it a Recommends would drag GNOME Shell onto
+machines that will never draw a pixel.
 
-To build the package from a checkout:
+To build it from a checkout:
 
 ```sh
 packaging/deb/build.sh              # -> dist/tower_<version>_all.deb
@@ -147,7 +157,7 @@ check.
 | `/usr/bin/tower` | the dashboard |
 | `/usr/bin/towerd` | the daemon (you rarely run this by hand) |
 | `/usr/bin/tower-tray` | the top-bar radar |
-| `/usr/lib/tower/` | `towerd.py`, `tower-tui.py`, `_linux.py`, `tower-tray.py` |
+| `/usr/lib/tower/` | `towerd.py`, `tower-tui.py`, `tower-tray.py`, `_linux.py` |
 | `/usr/lib/systemd/user/tower{,-tray}.service` | the login-item analogs |
 | `~/.tower/` | state, config, log, command files |
 | `~/.cache/tower/icons` | rendered radar frames (a cache; safe to delete) |

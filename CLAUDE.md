@@ -41,18 +41,19 @@ condition (your location or your connection) recovers.
   no debhelper), the systemd **user** unit, wrappers, man pages, and
   `ci-smoke.sh` (install → run → SIGTERM un-routes → remove, in a container).
 - `docs/` — ARCHITECTURE.md, DESIGN.md, APP.md, TUI.md, LINUX.md.
-- Two Debian packages: `tower` (daemon + TUI; `python3` + `procps`, so it
-  installs headless) and `tower-tray` (the top bar; pulls GTK3). Keep the GTK
-  dependency out of `tower` — a build box should be guardable without it.
+- One Debian package with all three parts. GTK3 + the indicator bindings are
+  **Recommends, never Depends** — that is what lets the same .deb install on a
+  headless box (`--no-install-recommends`) and still arm the guard there. So
+  `tower-tray` must degrade in words, not a traceback, when they are absent;
+  `ci-smoke.sh` tests both halves of that bargain.
 
 ## Build / run
 - `./build.sh` then `open "Tower.app"`.
 - TUI: `python3 "Tower.app/Contents/Resources/tower-tui.py"`.
-- Deb: `packaging/deb/build.sh` → `dist/tower{,-tray}_<version>_all.deb`.
-  Verify on a release you claim: `docker run --rm -v "$PWD:/pkg" -w /pkg
-  ubuntu:22.04 bash packaging/deb/ci-smoke.sh dist/tower_<v>_all.deb
-  dist/tower-tray_<v>_all.deb`. The version comes from `src/Info.plist`, same
-  as `release.sh` — one place to bump.
+- Deb: `packaging/deb/build.sh` → `dist/tower_<version>_all.deb`. Verify on a
+  release you claim: `docker run --rm -v "$PWD:/pkg" -w /pkg ubuntu:22.04 bash
+  packaging/deb/ci-smoke.sh dist/tower_<v>_all.deb`. The version comes from
+  `src/Info.plist`, same as `release.sh` — one place to bump.
 - Tray, live: `python3 src/tower-tray.py`. To *see* the panel without a
   session, reparent its child into a `Gtk.OffscreenWindow` and
   `get_surface().write_to_png(...)` — X11/Wayland screen grabs of it come back

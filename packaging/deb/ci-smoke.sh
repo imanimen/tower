@@ -6,11 +6,7 @@
 # writes to $HOME), one per release we claim to support:
 #
 #   docker run --rm -v "$PWD:/pkg" -w /pkg ubuntu:22.04 \
-#     bash packaging/deb/ci-smoke.sh dist/tower_3.1.0_all.deb \
-#                                    dist/tower-tray_3.1.0_all.deb
-#
-# The second argument is optional; given, it also installs the top-bar package
-# and checks the parts of it that do not need a session.
+#     bash packaging/deb/ci-smoke.sh dist/tower_3.1.0_all.deb
 #
 # What it actually checks — the packaging claims, not the app's features:
 #   * apt can resolve the declared Depends on this Ubuntu (so `apt install`,
@@ -22,30 +18,36 @@
 #     leaves Claude Code on a working direct connection,
 #   * removing the package removes the files.
 #
-# And for tower-tray:
-#   * apt can resolve GTK3 + the Ayatana indicator bindings on this Ubuntu,
-#   * the module byte-compiles and its GI typelibs actually import,
-#   * with no session it exits 1 with one honest line instead of a traceback.
+# And for the top-bar radar, both halves of the Recommends bargain:
+#   * installed WITHOUT recommends (the headless case), `tower-tray` exits 1
+#     naming the packages it wants — never a traceback,
+#   * with those packages added, apt can resolve them on this Ubuntu and the GI
+#     typelibs really import, and `tower-tray` then exits 1 for the honest
+#     reason: a container has no session to put a top bar in.
 set -euo pipefail
 
-DEB="${1:?usage: ci-smoke.sh <path-to-.deb> [<path-to-tray.deb>]}"
-TRAY_DEB="${2:-}"
+DEB="${1:?usage: ci-smoke.sh <path-to-.deb>}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export DEBIAN_FRONTEND=noninteractive
 
 step() { printf '\n▸ %s\n' "$*"; }
 
-step "installing $DEB"
+step "installing $DEB (without recommends — the headless case)"
 apt-get update -qq
 # `apt install ./file.deb` (not dpkg -i) so Depends are resolved for real.
-apt-get install -y -qq "./$DEB" >/dev/null
+# --no-install-recommends is the point of this first pass: it proves the daemon
+# and the dashboard stand on python3 + procps alone.
+apt-get install -y -qq --no-install-recommends "./$DEB" >/dev/null
 command -v tower
 command -v towerd
+command -v tower-tray
 test -f /usr/lib/systemd/user/tower.service
+test -f /usr/lib/systemd/user/tower-tray.service
 # Ask dpkg, not the filesystem: the official Ubuntu container images ship a
 # dpkg exclude for /usr/share/man, so an installed man page is legitimately
 # absent there while still being in the package.
 dpkg -L tower | grep -q 'man1/tower\.1\.gz'
+dpkg -L tower | grep -q 'man1/tower-tray\.1\.gz'
 
 step "python version on this release"
 python3 -V
@@ -53,6 +55,7 @@ python3 -V
 # that matters — 22.04 ships 3.10, so a newer-syntax slip has to fail here.
 python3 -m py_compile /usr/lib/tower/towerd.py \
                       /usr/lib/tower/tower-tui.py \
+                      /usr/lib/tower/tower-tray.py \
                       /usr/lib/tower/_linux.py
 echo "  byte-compiles"
 
@@ -90,21 +93,30 @@ fi
 echo "  un-routed"
 cat "$HOME/.tower/daemon.log"
 
-if [ -n "$TRAY_DEB" ]; then
-  step "installing $TRAY_DEB"
-  # --no-install-recommends on purpose, twice over: the Recommends is
-  # gnome-shell-extension-appindicator, which pulls the whole of GNOME Shell
-  # into a container that will never draw a pixel, and the thing worth testing
-  # is that the *hard* dependencies are enough to import the toolkit.
-  apt-get install -y -qq --no-install-recommends "./$TRAY_DEB" >/dev/null
-  command -v tower-tray
-  test -f /usr/lib/systemd/user/tower-tray.service
-  dpkg -L tower-tray | grep -q 'man1/tower-tray\.1\.gz'
+# One helper for both passes: run the tray, demand exit 1, and demand that what
+# it printed contains the phrase a person needs to read.
+expect_tray_says() {
+  set +e
+  out=$(tower-tray 2>&1); rc=$?
+  set -e
+  [ "$rc" = "1" ] || { echo "FAIL: expected exit 1, got $rc"; echo "$out"; exit 1; }
+  case "$out" in
+    *"$1"*) printf '  %s\n' "$out" | head -3 ;;
+    *) echo "FAIL: expected to see '$1', got:"; echo "$out"; exit 1 ;;
+  esac
+}
 
-  step "the tray's toolkit is really there"
-  python3 -m py_compile /usr/lib/tower/tower-tray.py
-  # A satisfied Depends line is not proof: the typelibs have to load.
-  python3 - <<'PYCHECK'
+step "without the toolkit, the tray names what it needs"
+expect_tray_says "no AppIndicator support found"
+
+step "adding the recommended toolkit"
+# The other half: these are the Recommends, and apt has to be able to resolve
+# them on this release for the top bar to work at all.
+apt-get install -y -qq --no-install-recommends \
+  python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+  gir1.2-ayatanaappindicator3-0.1 >/dev/null
+python3 - <<'PYCHECK'
+# A satisfied dependency line is not proof: the typelibs have to load.
 import gi
 gi.require_version("Gtk", "3.0")
 for name in ("AyatanaAppIndicator3", "AppIndicator3"):
@@ -116,29 +128,18 @@ for name in ("AyatanaAppIndicator3", "AppIndicator3"):
     except (ValueError, ImportError):
         continue
 else:
-    raise SystemExit("no AppIndicator typelib after installing tower-tray")
+    raise SystemExit("no AppIndicator typelib after installing the toolkit")
 from gi.repository import Gtk          # noqa: F401
 import cairo                            # noqa: F401  (python3-gi-cairo)
 print("  gtk3 + cairo import clean")
 PYCHECK
 
-  step "with no session it says so, once, and exits"
-  set +e
-  out=$(tower-tray 2>&1); rc=$?
-  set -e
-  [ "$rc" = "1" ] || { echo "FAIL: expected exit 1, got $rc"; echo "$out"; exit 1; }
-  case "$out" in
-    *"no graphical session"*) echo "  $out" ;;
-    *) echo "FAIL: unhelpful output with no session:"; echo "$out"; exit 1 ;;
-  esac
-fi
+step "with the toolkit but no session, it says that instead"
+expect_tray_says "no graphical session"
 
 step "removal"
-if [ -n "$TRAY_DEB" ]; then
-  apt-get remove -y -qq tower-tray >/dev/null
-  test ! -e /usr/bin/tower-tray
-fi
 apt-get remove -y -qq tower >/dev/null
+test ! -e /usr/bin/tower-tray
 test ! -e /usr/lib/tower/towerd.py
 test ! -e /usr/bin/tower
 

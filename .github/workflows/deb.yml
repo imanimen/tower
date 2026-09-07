@@ -1,7 +1,7 @@
-# Build the Debian packages and prove they install and run on every Ubuntu we
-# claim: 22.04 through 26.04. Both are Architecture: all (Tower on Linux
-# compiles nothing), so they are built once and then installed into each
-# release's container.
+# Build the Debian package and prove it installs and runs on every Ubuntu we
+# claim: 22.04 through 26.04. It is Architecture: all (Tower on Linux compiles
+# nothing), so it is built once and then installed into each release's
+# container.
 name: deb
 
 on:
@@ -55,9 +55,8 @@ jobs:
       - name: install, run, un-route, remove on ${{ matrix.image }}
         run: |
           DEB=$(ls dist/tower_*.deb | head -1)
-          TRAY=$(ls dist/tower-tray_*.deb | head -1)
           docker run --rm -v "$PWD:/pkg" -w /pkg "${{ matrix.image }}" \
-            bash packaging/deb/ci-smoke.sh "$DEB" "$TRAY"
+            bash packaging/deb/ci-smoke.sh "$DEB"
 
   attach:
     if: github.event_name == 'release'

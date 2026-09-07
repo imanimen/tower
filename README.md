@@ -43,11 +43,11 @@ no app, no `swiftc`. From a checkout: `python3 src/tower-tui.py`.
 
 </details>
 
-**On Ubuntu or Debian?** There are packages — including the radar for your
-top bar:
+**On Ubuntu or Debian?** There's a package — daemon, dashboard and the radar
+for your top bar, all in one:
 
 ```sh
-sudo apt install ./tower_3.1.0_all.deb ./tower-tray_3.1.0_all.deb
+sudo apt install ./tower_3.1.0_all.deb     # from the releases page
 tower-tray                                 # the radar in your top bar
 ```
 
@@ -279,7 +279,7 @@ codebase small and the [Windows port](windows_plan.md) straightforward.
 
 - **macOS 14+**, Apple Silicon — for the full experience (menubar app + TUI).
 - **Ubuntu 22.04+ / Debian 12+** — daemon, terminal dashboard **and a top-bar
-  radar**, as two `.deb`s; see [Linux](#linux-debianubuntu) below.
+  radar**, in one `.deb`; see [Linux](#linux-debianubuntu) below.
 - **Windows 10/11** — daemon + terminal dashboard only, and **experimental**;
   see [Windows](#windows-experimental) below.
 - **Python 3.8+** on `PATH` (macOS ships one; Homebrew or python.org also fine).
@@ -299,22 +299,26 @@ All three parts run on Linux, packaged: the daemon, the terminal dashboard, and
 **the radar in your top bar** — the Linux counterpart of the macOS menu-bar app.
 
 ```sh
-sudo apt install ./tower_<version>_all.deb ./tower-tray_<version>_all.deb
+sudo apt install ./tower_<version>_all.deb
 
 tower-tray                                 # the radar in your top bar
 tower                                      # the terminal dashboard
 systemctl --user enable --now tower-tray   # the radar there from login
 ```
 
-Two packages, on purpose: **`tower`** is the daemon plus the dashboard and
-needs only `python3` and `procps` (so it installs on a headless build box),
-while **`tower-tray`** pulls GTK3 and the Ayatana indicator bindings, which
-have no business on a server. Either front-end starts the daemon on demand.
+One package, everything in it. The only hard dependencies are `python3` and
+`procps`, both already on a stock Ubuntu; GTK3 and the indicator bindings are
+**Recommends**, so a desktop install pulls them by default and
+`apt install --no-install-recommends` still gives a headless build box the
+daemon and the dashboard without GTK. Either front-end starts the daemon on
+demand.
 
-**Ubuntu 22.04, 24.04 and 26.04 are tested in CI** — install, run, un-route on
-`SIGTERM`, remove, plus the tray's toolkit actually importing and its
-no-session path exiting with one honest line — on each release's own Python.
-`Architecture: all`: nothing is compiled, so one build covers amd64 and arm64.
+**Ubuntu 22.04, 24.04 and 26.04 are tested in CI** — install without
+recommends, run, un-route on `SIGTERM`, remove; plus both halves of that
+bargain: with no toolkit `tower-tray` names the packages it wants, and with the
+toolkit added its typelibs really import and it exits for the honest reason (no
+session). All on each release's own Python. `Architecture: all`: nothing is
+compiled, so one build covers amd64 and arm64.
 
 The top bar is a StatusNotifierItem, which KDE, XFCE, Cinnamon and Budgie show
 natively. **GNOME shows one only through its shipped appindicator extension** —
@@ -328,10 +332,10 @@ Stopping it (`systemctl --user stop tower`, `Q` in the dashboard, **Quit
 Tower** in the menu) sends `SIGTERM`, and the daemon un-routes Claude Code
 before it exits.
 
-Build both from a checkout — the only build dependency is `dpkg` itself:
+Build it from a checkout — the only build dependency is `dpkg` itself:
 
 ```sh
-packaging/deb/build.sh             # → dist/tower{,-tray}_<version>_all.deb
+packaging/deb/build.sh             # → dist/tower_<version>_all.deb
 packaging/deb/build.sh --install
 ```
 

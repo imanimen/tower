@@ -38,34 +38,58 @@ import sys
 import time
 import uuid
 
-import gi
+# The toolkit is a *Recommends* of the tower package, not a Depends — that is
+# what lets one .deb install on a headless box with --no-install-recommends and
+# still arm the guard there. So every piece of it can legitimately be missing,
+# and each way of missing it has to end in the same sentence naming what to
+# install, never in a traceback: `import gi` fails when python3-gi is absent,
+# `import cairo` when python3-gi-cairo is, and the indicator typelib is a third
+# thing again. Ayatana is the maintained fork and what Ubuntu 22.04+ ships; the
+# older AppIndicator3 name survives on some spins, so accept either.
+_HOWTO = """  The top bar needs GTK and the Ayatana indicator bindings:
 
-gi.require_version("Gtk", "3.0")
-# Ayatana is the maintained fork and what Ubuntu 22.04+ ships; the older
-# AppIndicator3 name is still present on some spins, so accept either. Without
-# one of them there is no top-bar item to put anything in, and saying so beats
-# a stack trace.
+    sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \\
+                     gir1.2-ayatanaappindicator3-0.1
+
+  On GNOME the top bar also needs the shipped extension:
+
+    sudo apt install gnome-shell-extension-appindicator
+
+  Meanwhile the terminal dashboard has every feature, and needs none of it:
+
+    tower
+"""
+
+
+def _no_toolkit(what):
+    sys.stderr.write(f"tower-tray: no AppIndicator support found ({what}).\n")
+    sys.stderr.write(_HOWTO)
+    raise SystemExit(1)
+
+
+try:
+    import cairo                                    # noqa: F401  (python3-gi-cairo)
+    import gi
+except ImportError as e:                            # noqa: BLE001
+    _no_toolkit(e.name or "missing module")
+
+try:
+    gi.require_version("Gtk", "3.0")
+except ValueError:
+    _no_toolkit("no GTK 3 typelib")
+
 _IND = None
 for _name in ("AyatanaAppIndicator3", "AppIndicator3"):
     try:
         gi.require_version(_name, "0.1")
-        _IND = __import__("gi.repository", fromlist=[_name])
-        _IND = getattr(_IND, _name)
+        _IND = getattr(__import__("gi.repository", fromlist=[_name]), _name)
         break
     except (ValueError, ImportError):
         continue
+if _IND is None:
+    _no_toolkit("no indicator typelib")
 
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
-
-if _IND is None:
-    sys.stderr.write(
-        "tower-tray: no AppIndicator support found.\n"
-        "  The top-bar item needs the Ayatana indicator bindings:\n"
-        "    sudo apt install gir1.2-ayatanaappindicator3-0.1\n"
-        "  On GNOME also enable the shipped extension:\n"
-        "    sudo apt install gnome-shell-extension-appindicator\n"
-        "  Meanwhile the terminal dashboard has every feature:  tower\n")
-    raise SystemExit(1)
 
 APP_ID = "com.tower.guard"
 
