@@ -6,7 +6,7 @@
 # writes to $HOME), one per release we claim to support:
 #
 #   docker run --rm -v "$PWD:/pkg" -w /pkg ubuntu:22.04 \
-#     bash packaging/deb/ci-smoke.sh dist/tower_3.1.0_all.deb
+#     bash packaging/deb/ci-smoke.sh dist/tower_3.2.0_all.deb
 #
 # What it actually checks — the packaging claims, not the app's features:
 #   * apt can resolve the declared Depends on this Ubuntu (so `apt install`,

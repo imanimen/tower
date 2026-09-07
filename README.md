@@ -43,19 +43,20 @@ no app, no `swiftc`. From a checkout: `python3 src/tower-tui.py`.
 
 </details>
 
-**On Ubuntu or Debian?** There's a package — daemon, dashboard and the radar
-for your top bar, all in one:
+**On Ubuntu or Debian?** There's a package on every release — daemon,
+dashboard and the radar for your top bar, all in one:
 
 ```sh
-sudo apt install ./tower_3.1.0_all.deb     # from the releases page
+curl -fLO https://github.com/imanimen/tower/releases/latest/download/tower_all.deb
+sudo apt install ./tower_all.deb
 tower-tray                                 # the radar in your top bar
 ```
 
 Ubuntu 22.04 → 26.04, amd64 and arm64. See [Linux](#linux-debianubuntu).
 
 Requires macOS 14+ on Apple Silicon, Python 3.8+, and Claude Code.
-(Linux: [daemon + dashboard, packaged](#linux-debianubuntu). Windows: the same
-two, [experimentally](#windows-experimental).)
+(Linux: [daemon, dashboard and a top-bar radar, packaged](#linux-debianubuntu).
+Windows: the daemon and dashboard, [experimentally](#windows-experimental).)
 
 ---
 
@@ -299,12 +300,18 @@ All three parts run on Linux, packaged: the daemon, the terminal dashboard, and
 **the radar in your top bar** — the Linux counterpart of the macOS menu-bar app.
 
 ```sh
-sudo apt install ./tower_<version>_all.deb
+curl -fLO https://github.com/imanimen/tower/releases/latest/download/tower_all.deb
+sudo apt install ./tower_all.deb
 
 tower-tray                                 # the radar in your top bar
 tower                                      # the terminal dashboard
 systemctl --user enable --now tower-tray   # the radar there from login
 ```
+
+`tower_all.deb` carries no version in its name on purpose, so that URL is
+always the newest one — the same reason `Tower.app.zip` doesn't either. CI
+builds it from the tag and attaches it to the release, after running the
+install/run/remove matrix below against it.
 
 One package, everything in it. Either front-end starts the daemon on demand.
 

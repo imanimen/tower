@@ -26,9 +26,16 @@ Python and already portable; only four OS edges differ, and they live in
 ## Install
 
 ```sh
-sudo apt install ./tower_<version>_all.deb                       # desktop
-sudo apt install --no-install-recommends ./tower_<version>_all.deb   # server
+curl -fLO https://github.com/imanimen/tower/releases/latest/download/tower_all.deb
+
+sudo apt install ./tower_all.deb                       # desktop: radar included
+sudo apt install --no-install-recommends ./tower_all.deb   # server: guard only
 ```
+
+The asset is version-less so that URL always points at the newest release (the
+package inside knows its own version — `apt policy tower`). CI builds it from
+the tag and attaches it after running the install/run/remove matrix against it,
+so what you download is what was tested.
 
 Ubuntu 22.04 through 26.04 (and Debian 12+). `Architecture: all` — Tower on
 Linux compiles nothing, so one package covers amd64 and arm64.
