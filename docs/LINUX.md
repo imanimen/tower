@@ -33,21 +33,77 @@ sudo apt install --no-install-recommends ./tower_<version>_all.deb   # server
 Ubuntu 22.04 through 26.04 (and Debian 12+). `Architecture: all` — Tower on
 Linux compiles nothing, so one package covers amd64 and arm64.
 
-`tmux` is another *Recommends*: without it neither front-end can raise an
-agent's terminal tab, and both hand you `claude --resume <id>` instead.
-`gnome-shell-extension-appindicator` is a *Suggests* — Ubuntu's GNOME session
-already enables it, and making it a Recommends would drag GNOME Shell onto
-machines that will never draw a pixel.
+## Requirements
 
-To build it from a checkout:
+### What the package declares
+
+**Depends** — the install fails without these, and a stock Ubuntu has both:
+
+| | why |
+|---|---|
+| `python3 (>= 3.9)` | the daemon and both front-ends are Python; everything else they use is stdlib |
+| `procps` | `ps`, whose table the agent monitor reads to find running `claude` processes |
+
+**Recommends** — apt installs these by default, and they are *only* for the top
+bar and the conveniences. This is the whole reason there is one package instead
+of two: `--no-install-recommends` gives a headless machine the guard without
+dragging GTK onto a server.
+
+| | why |
+|---|---|
+| `python3-gi`, `gir1.2-gtk-3.0` | GTK3 through the distro's own bindings — the toolkit the top-bar panel is built in |
+| `python3-gi-cairo` | Cairo, which draws the radar and the meters |
+| `gir1.2-ayatanaappindicator3-0.1` \| `gir1.2-appindicator3-0.1` | the StatusNotifierItem itself. Ayatana is the maintained fork and what Ubuntu 22.04+ ships; the older name survives on some spins, so either satisfies it |
+| `tmux` | raising an agent's terminal tab. Without it both front-ends hand you `claude --resume <id>` instead |
+| `systemd` | the two **user** units, Tower's login-item analogs |
+
+**Suggests** — never installed automatically:
+
+| | why |
+|---|---|
+| `gnome-shell-extension-appindicator` | GNOME renders a StatusNotifierItem only through it. Ubuntu's session enables it already, and as a Recommends it would pull the whole of GNOME Shell onto machines that will never draw a pixel |
+| `nodejs` | Claude Code is not in apt, so this is a hint, not a mechanism |
+
+Without the GTK set, `tower-tray` exits with one line naming those four
+packages and pointing at the dashboard, which needs none of them — a sentence,
+never a traceback. `ci-smoke.sh` tests that on every release.
+
+### What apt cannot express
+
+- **Ubuntu 22.04+ or Debian 12+.** The floor is really Python 3.9 for
+  `zoneinfo`; 22.04 ships 3.10, and the build byte-compiles against the
+  target's own Python so a newer-syntax slip fails the build, not your install.
+- **Claude Code**, with `claude` findable — on `PATH`, or in `~/.local/bin`,
+  `~/.npm-global/bin`, `~/.claude/local` or `/snap/bin`, which `find_claude()`
+  checks directly. Without it the guard still works; only the real plan-usage
+  numbers (which come from `claude -p /usage`) go missing.
+- **A graphical session**, for `tower-tray` only. With the toolkit installed but
+  no session it says so and exits; `tower` and the daemon do not care.
+- **The GNOME extension enabled**, if you are on GNOME. KDE, XFCE, Cinnamon and
+  Budgie show a StatusNotifierItem with nothing extra.
+
+### What it does *not* require
+
+No root at runtime, and nothing system-wide: the daemon is a per-user process
+whose entire world is `~/.tower` and the `env` block of
+`~/.claude/settings.json`. No PPA, no pip, no third-party Python packages — the
+GTK bindings above are the distro's own. Keep-awake, including the lid-closed
+mode, needs no password (logind grants the inhibitor to any user), which is the
+one place Linux is *less* demanding than macOS.
+
+### To build it, rather than install it
+
+`dpkg-deb` and `python3`. That is the entire build dependency list.
 
 ```sh
 packaging/deb/build.sh              # -> dist/tower_<version>_all.deb
 packaging/deb/build.sh --install    # ...and apt-install it
 ```
 
-It uses plain `dpkg-deb`, so the only build dependency is dpkg itself — no
-debhelper, no build-essential, and the same script runs on 22.04 and 26.04.
+No debhelper and no build-essential, so the same script runs on 22.04 and on
+26.04, and in a CI container with nothing else installed. The build also
+byte-compiles against the target Python, so a syntax slip fails here rather
+than on someone's machine.
 
 ## Running it
 

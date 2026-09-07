@@ -306,12 +306,20 @@ tower                                      # the terminal dashboard
 systemctl --user enable --now tower-tray   # the radar there from login
 ```
 
-One package, everything in it. The only hard dependencies are `python3` and
-`procps`, both already on a stock Ubuntu; GTK3 and the indicator bindings are
-**Recommends**, so a desktop install pulls them by default and
-`apt install --no-install-recommends` still gives a headless build box the
-daemon and the dashboard without GTK. Either front-end starts the daemon on
-demand.
+One package, everything in it. Either front-end starts the daemon on demand.
+
+**Requirements.** `Depends` is only `python3 (>= 3.9)` and `procps` — both on a
+stock Ubuntu, and `procps` just for the `ps` table the agent monitor reads.
+Everything the top bar needs is a **Recommends** (`python3-gi`,
+`python3-gi-cairo`, `gir1.2-gtk-3.0`, `gir1.2-ayatanaappindicator3-0.1`), so
+apt pulls it by default on a desktop while `--no-install-recommends` still arms
+the guard on a headless build box without dragging GTK onto a server. `tmux`
+(to raise an agent's tab) and `systemd` (the user units) are Recommends too;
+`gnome-shell-extension-appindicator` is a *Suggests*, since as a Recommends it
+would pull all of GNOME Shell. Without the GTK set, `tower-tray` exits with one
+line naming those four packages. No root at runtime, no pip, no PPA, no
+third-party Python — and Claude Code itself is the one thing apt cannot install
+for you. Full table: **[docs/LINUX.md](docs/LINUX.md#requirements)**.
 
 **Ubuntu 22.04, 24.04 and 26.04 are tested in CI** — install without
 recommends, run, un-route on `SIGTERM`, remove; plus both halves of that
