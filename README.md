@@ -43,8 +43,18 @@ no app, no `swiftc`. From a checkout: `python3 src/tower-tui.py`.
 
 </details>
 
+**On Ubuntu or Debian?** There's a package:
+
+```sh
+sudo apt install ./tower_3.1.0_all.deb     # from the releases page
+tower                                      # open the dashboard
+```
+
+Ubuntu 22.04 → 26.04, amd64 and arm64. See [Linux](#linux-debianubuntu).
+
 Requires macOS 14+ on Apple Silicon, Python 3.8+, and Claude Code.
-(Windows: the daemon and terminal dashboard run today, [experimentally](#windows-experimental).)
+(Linux: [daemon + dashboard, packaged](#linux-debianubuntu). Windows: the same
+two, [experimentally](#windows-experimental).)
 
 ---
 
@@ -232,12 +242,15 @@ tower/
 ├── build.sh                     # assembles the .app from src/
 ├── release.sh                   # builds, packages and publishes a release
 ├── site/                        # the landing page + install.sh (→ gh-pages)
-├── docs/                        # ARCHITECTURE, DESIGN, APP, TUI
+├── packaging/deb/               # the Debian/Ubuntu package (build.sh, unit, docs)
+├── docs/                        # ARCHITECTURE, DESIGN, APP, TUI, LINUX
 ├── windows_plan.md              # plan to port this to Windows
 └── src/
     ├── towerd.py               # the daemon (proxy + geo + usage + net + agents + IPC)
     ├── *.swift                  # native menubar app (AppKit + SwiftUI); Glyph.swift = the marks
     ├── tower-tui.py            # terminal dashboard (curses)
+    ├── _linux.py                # the Linux edges (systemd-inhibit, /proc)
+    ├── _win.py, _wincurses.py   # the Windows edges (mutex, keep-awake, curses shim)
     ├── Info.plist
     └── AppIcon.icns
 ```
@@ -263,6 +276,8 @@ codebase small and the [Windows port](windows_plan.md) straightforward.
 ## Requirements
 
 - **macOS 14+**, Apple Silicon — for the full experience (menubar app + TUI).
+- **Ubuntu 22.04+ / Debian 12+** — daemon + terminal dashboard, as a `.deb`;
+  see [Linux](#linux-debianubuntu) below.
 - **Windows 10/11** — daemon + terminal dashboard only, and **experimental**;
   see [Windows](#windows-experimental) below.
 - **Python 3.8+** on `PATH` (macOS ships one; Homebrew or python.org also fine).
@@ -273,6 +288,52 @@ No root, no daemons installed system-wide (except the optional keep-awake
 "lid-closed" mode, which asks for admin once and can be fully removed).
 Nothing leaves your machine but the public-IP country lookup and the network
 probes.
+
+---
+
+## Linux (Debian/Ubuntu)
+
+The daemon and the terminal dashboard run on Linux, packaged. The menubar app
+is Swift/AppKit and has no Linux counterpart, so here the TUI *is* the
+front-end — and a complete one: everything the popover does, it does.
+
+```sh
+sudo apt install ./tower_<version>_all.deb
+
+tower                                  # open the dashboard (starts the daemon)
+systemctl --user enable --now tower    # keep the guard running from login
+```
+
+**Ubuntu 22.04, 24.04 and 26.04 are tested in CI** (install, run, un-route on
+`SIGTERM`, remove) on each release's own Python. `Architecture: all` — nothing
+is compiled, so one package covers amd64 and arm64. The only dependencies are
+`python3` and `procps`, which a stock Ubuntu already has.
+
+Installing the package starts nothing on purpose — the daemon opens a proxy and
+edits `~/.claude/settings.json`, so switching it on stays your call. "On by
+default" still holds where it counts: `tower` starts the daemon on demand.
+Stopping it (`systemctl --user stop tower`, or `Q` in the dashboard) sends
+`SIGTERM`, and the daemon un-routes Claude Code before it exits.
+
+Build it from a checkout — the only build dependency is `dpkg` itself:
+
+```sh
+packaging/deb/build.sh             # → dist/tower_<version>_all.deb
+packaging/deb/build.sh --install
+```
+
+Four OS edges differ from macOS, all in [`src/_linux.py`](src/_linux.py):
+keep-awake is `systemd-inhibit` (which covers idle, sleep **and the lid** with
+no admin password — the one macOS feature that costs `sudo` is free here),
+and reading a process's cwd, finding who is connected to the guard, and
+focusing a tab go through `/proc` and `tmux` instead of `lsof` and `osascript`.
+There is no TCC on Linux either, so the agent monitor reads git roots and
+branches for agents working anywhere. Everything else — the proxy, the
+fail-closed gate, geolocation, the network probe, `/usage`, the transcript
+index — is the same shared daemon.
+
+Details, including where Claude Code has to be findable from a systemd user
+unit: **[docs/LINUX.md](docs/LINUX.md)**.
 
 ---
 
@@ -324,6 +385,7 @@ flag. The plan for the native tray is [windows_plan.md](windows_plan.md).
 
 ## License
 
-Open source. Use it, fork it, port it. The Windows daemon and terminal dashboard
-already run ([experimental](#windows-experimental)) — `windows_plan.md` covers
-what's left, chiefly the native tray.
+Open source. Use it, fork it, port it. It has been: the daemon and dashboard
+run on [Linux](#linux-debianubuntu), packaged for Debian/Ubuntu, and on
+[Windows](#windows-experimental), experimentally. Both are missing only the
+native tray — `windows_plan.md` covers what that takes.

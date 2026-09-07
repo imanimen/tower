@@ -1,0 +1,45 @@
+#!/bin/sh
+# Tower postinst. Deliberately does NOT enable or start anything: the daemon
+# rewrites ~/.claude/settings.json and opens a local proxy, which is a thing a
+# person should switch on knowingly, and it is per-user state anyway (a package
+# script runs as root and has no user session to enable it in).
+#
+# "On by default" still holds where it matters: `tower` starts the daemon on
+# demand, so opening the dashboard is enough — the unit is only for having it
+# already running at login.
+set -e
+
+case "$1" in
+  configure)
+    # Refresh the desktop/icon caches so the launcher shows up without a
+    # re-login. Both are optional tools; a missing one is not an error.
+    if command -v update-desktop-database >/dev/null 2>&1; then
+      update-desktop-database -q /usr/share/applications || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+      gtk-update-icon-cache -q -f -t /usr/share/icons/hicolor || true
+    fi
+
+    cat <<'MSG'
+
+  Tower installed.
+
+    tower                                     open the dashboard (starts the daemon)
+    systemctl --user enable --now tower       keep the guard running from login
+    systemctl --user status tower             is it running?
+
+  Tower guards Claude Code by putting a proxy into the "env" block of
+  ~/.claude/settings.json, and takes it back out on every clean exit. It is
+  fail-closed: while it cannot confirm both your country and a usable path to
+  Anthropic, Claude requests are held and answered 503, which Claude Code
+  shows as its own "Retrying" spinner. That is Tower working, not Tower broken.
+
+  Set your country in the dashboard (press c) — it defaults to CA.
+
+MSG
+    ;;
+  abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+esac
+
+exit 0

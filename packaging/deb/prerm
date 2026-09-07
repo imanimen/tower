@@ -1,0 +1,31 @@
+#!/bin/sh
+# Stop the daemon for any user who has it running, so the package's files are
+# not yanked out from under a live process — and, more importantly, so each
+# daemon gets its SIGTERM and un-routes ~/.claude/settings.json on the way out.
+# A daemon that is killed without that leaves Claude Code pointed at a proxy
+# that no longer exists.
+set -e
+
+case "$1" in
+  remove|upgrade|deconfigure)
+    if command -v systemctl >/dev/null 2>&1; then
+      # Every logged-in user's session manager, best effort. `systemctl --user`
+      # from root needs that user's own bus, so run it as them with their
+      # XDG_RUNTIME_DIR (runuser is util-linux, always present; `systemctl -M`
+      # would need systemd-container, which Ubuntu does not install by
+      # default). Failures — no live session, unit not enabled — are expected.
+      loginctl list-users --no-legend 2>/dev/null | while read -r uid name _rest; do
+        [ -d "/run/user/$uid" ] || continue
+        runuser -u "$name" -- env "XDG_RUNTIME_DIR=/run/user/$uid" \
+          systemctl --user stop tower.service >/dev/null 2>&1 || true
+      done
+    fi
+    # Anything started by hand (via `tower`) rather than by systemd. SIGTERM
+    # only: the daemon's own handler is what removes the proxy.
+    if command -v pkill >/dev/null 2>&1; then
+      pkill -TERM -f '/usr/lib/tower/towerd\.py' >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

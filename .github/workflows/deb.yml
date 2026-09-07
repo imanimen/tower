@@ -1,0 +1,79 @@
+# Build the Debian package and prove it installs and runs on every Ubuntu we
+# claim: 22.04 through 26.04. The package is Architecture: all (Tower on Linux
+# compiles nothing), so it is built once and then installed into each release's
+# container.
+name: deb
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/towerd.py'
+      - 'src/tower-tui.py'
+      - 'src/_linux.py'
+      - 'src/Info.plist'
+      - 'packaging/deb/**'
+      - '.github/workflows/deb.yml'
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      deb: ${{ steps.build.outputs.deb }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: build
+        run: |
+          packaging/deb/build.sh
+          echo "deb=$(basename dist/*.deb)" >> "$GITHUB_OUTPUT"
+      - name: lintian
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lintian
+          lintian --no-tag-display-limit dist/*.deb || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+  install:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every Ubuntu the README claims. Plain `docker run` rather than a
+        # `container:` job so the smoke test runs on the release's own Python
+        # with nothing from the runner leaking in.
+        image: ['ubuntu:22.04', 'ubuntu:24.04', 'ubuntu:26.04']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb
+          path: dist
+      - name: install, run, un-route, remove on ${{ matrix.image }}
+        run: |
+          DEB=$(ls dist/*.deb | head -1)
+          docker run --rm -v "$PWD:/pkg" -w /pkg "${{ matrix.image }}" \
+            bash packaging/deb/ci-smoke.sh "$DEB"
+
+  attach:
+    if: github.event_name == 'release'
+    needs: [build, install]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb
+      - run: gh release upload "$TAG" ./*.deb --clobber --repo "$REPO"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
